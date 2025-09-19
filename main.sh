@@ -43,6 +43,8 @@ auto_detect_ip() {
   ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}'
 }
 
+apt install jq -y
+
 banner() {
   clear
   SERVER_IP=$(hostname -I | awk '{print $1}')
@@ -52,12 +54,12 @@ banner() {
   echo "             VXLAN Tunnel Manager v1.0"
   echo "             PooyaServerSup"
   echo "======================================================"
-  echo -e "|${GREEN}Server Country    |${NC} $SERVER_COUNTRY"
+  echo -e "|${GREEN}Server Country |${NC} $SERVER_COUNTRY"
   echo " Hostname     : $(hostname)"
   echo " Kernel       : $(uname -r)"
   echo " Local Pub IP : $(auto_detect_ip)"
   echo " Device       : $(auto_detect_dev)"
-  echo -e "|${GREEN}Server ISP        |${NC} $SERVER_ISP"
+  echo -e "|${GREEN}Server ISP |${NC} $SERVER_ISP"
   echo "======================================================"
 }
 
@@ -331,6 +333,20 @@ install_haproxy() {
   echo "[+] HAProxy installed."
 }
 
+enable_bbr() {
+  banner
+  echo "[*] Enabling BBR congestion control..."
+  modprobe tcp_bbr || true
+  {
+    echo "net.core.default_qdisc=fq"
+    echo "net.ipv4.tcp_congestion_control=bbr"
+  } >> /etc/sysctl.conf
+  sysctl -p >/dev/null 2>&1
+  sysctl net.ipv4.tcp_congestion_control
+  echo "[+] BBR enabled successfully."
+  read -rp "Press Enter..." _
+}
+
 # ------------------ Menu (ORIGINAL + one new option 9) ------------------
 
 menu() {
@@ -345,7 +361,8 @@ menu() {
     echo "6) Delete"
     echo "7) Health Check"
     echo "8) Install HAProxy"
-    echo "9) Advanced Tools  ← NEW"
+    echo "9) Advanced Tools"
+    echo "10) Enable BBR   ← NEW"
     echo "0) Exit"
     echo "------------------------------------------"
     read -rp "Enter option: " op
@@ -358,7 +375,8 @@ menu() {
       6) delete_all ; read -rp "Press Enter..." _ ;;
       7) health_check ; read -rp "Press Enter..." _ ;;
       8) install_haproxy ; read -rp "Press Enter..." _ ;;
-      9) advanced_menu ;;   # ← اضافه شده
+      9) advanced_menu ;;
+      10) enable_bbr ;;
       0) exit 0 ;;
       *) echo "Invalid option"; sleep 1 ;;
     esac
