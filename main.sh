@@ -12,6 +12,11 @@
 #   - HAProxy installer option
 # ================================================================
 
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+MAGENTA='\033[0;35m'
+NC='\033[0m'
+
 set -euo pipefail
 
 CONF_FILE="/etc/vxlan-manager.conf"
@@ -39,15 +44,19 @@ auto_detect_ip() {
 }
 
 banner() {
+  SERVER_COUNTRY=$(curl -sS "http://ip-api.com/json/$SERVER_IP" | jq -r '.country')
+  SERVER_ISP=$(curl -sS "http://ip-api.com/json/$SERVER_IP" | jq -r '.isp')
   clear
   echo "======================================================"
   echo "             VXLAN Tunnel Manager v1.0"
   echo "             PooyaServerSup"
   echo "======================================================"
+  echo -e "|${GREEN}Server Country    |${NC} $SERVER_COUNTRY"
   echo " Hostname     : $(hostname)"
   echo " Kernel       : $(uname -r)"
   echo " Local Pub IP : $(auto_detect_ip)"
   echo " Device       : $(auto_detect_dev)"
+  echo -e "|${GREEN}Server ISP        |${NC} $SERVER_ISP"
   echo "======================================================"
 }
 
