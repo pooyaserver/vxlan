@@ -25,7 +25,7 @@
 ## 📦 Install & Upgrade
 
 ```
-bash <(curl -Ls https://raw.githubusercontent.com/pooyaserver/vxlan/refs/heads/master/main.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/pooyaserver/vxlan/master/main.sh)
 ```
 
 ## Languages
