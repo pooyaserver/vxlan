@@ -40,6 +40,6 @@ bash <(curl -Ls https://raw.githubusercontent.com/pooyaserver/vxlan/master/main.
 ## 🙏 Support with Crypto 
 - Tron (TRC20): `TJdfquHS6AiNxG8R6kVQQ7zERyKNPSJxRm`
 
-## 📧 Join Telegram Channel
+## 📧 My PV
 
 TG : @PooyaServerSup
