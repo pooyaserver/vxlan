@@ -45,6 +45,7 @@ auto_detect_ip() {
 
 banner() {
   clear
+  SERVER_IP=$(hostname -I | awk '{print $1}')
   SERVER_COUNTRY=$(curl -sS "http://ip-api.com/json/$SERVER_IP" | jq -r '.country')
   SERVER_ISP=$(curl -sS "http://ip-api.com/json/$SERVER_IP" | jq -r '.isp')
   echo "======================================================"
