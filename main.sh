@@ -44,9 +44,9 @@ auto_detect_ip() {
 }
 
 banner() {
+  clear
   SERVER_COUNTRY=$(curl -sS "http://ip-api.com/json/$SERVER_IP" | jq -r '.country')
   SERVER_ISP=$(curl -sS "http://ip-api.com/json/$SERVER_IP" | jq -r '.isp')
-  clear
   echo "======================================================"
   echo "             VXLAN Tunnel Manager v1.0"
   echo "             PooyaServerSup"
