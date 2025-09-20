@@ -5,6 +5,7 @@
 #
 # Features:
 #   - Multi VXLAN IR (up to 10 tunnels) for IPv4 and IPv6 (6to4)
+#   - Multi GRE EU (up to 10 tunnels) for IPv4 (Mikrotik)
 #   - Single VXLAN EU (IPv4 or IPv6)
 #   - Auto-detect local device & public IP
 #   - Config saved in /etc/vxlan-manager.conf
