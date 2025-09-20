@@ -573,11 +573,11 @@ menu() {
     echo "3) Install VXLAN EU (IPv4)"
     echo "4) Install VXLAN EU (IPv6 / 6to4)"
     echo "5) GRE Tunnel Manager (Add/Delete/List)"
-    echo "6) Status"
-    echo "7) Delete"
-    echo "8) Health Check"
-    echo "9) Install HAProxy"
-    echo "10) Install GostTunnel"
+    echo "6) Install HAProxy"
+    echo "7) Install GostTunnel"
+    echo "8) Status"
+    echo "9) Delete"
+    echo "10) Health Check"
     echo "11) Advanced Tools"
     echo "12) Enable BBR"
     echo "13) Update Script"
@@ -590,11 +590,11 @@ menu() {
       3) install_eu_v4 ; read -rp "Press Enter..." _ ;;
       4) install_eu_v6 ; read -rp "Press Enter..." _ ;;
       5) gre_menu ; read -rp "Press Enter..." _ ;;
-      6) status ; read -rp "Press Enter..." _ ;;
-      7) delete_all ; read -rp "Press Enter..." _ ;;
-      8) health_check ; read -rp "Press Enter..." _ ;;
-      9) install_haproxy ; read -rp "Press Enter..." _ ;;
-      10) install_gost ; read -rp "Press Enter..." _ ;;
+      6) install_haproxy ; read -rp "Press Enter..." _ ;;
+      7) install_gost ; read -rp "Press Enter..." _ ;;
+      8) status ; read -rp "Press Enter..." _ ;;
+      9) delete_all ; read -rp "Press Enter..." _ ;;
+      10) health_check ; read -rp "Press Enter..." _ ;;
       11) advanced_menu ;;
       12) enable_bbr ;;
       13) update_script ;;
