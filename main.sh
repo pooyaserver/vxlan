@@ -347,6 +347,57 @@ enable_bbr() {
   read -rp "Press Enter..." _
 }
 
+install_ipip() {
+  banner
+  echo "[*] Configure IPIP Tunnel (Ubuntu ↔ MikroTik)"
+
+  LOCAL_IP=$(auto_detect_ip)
+  DEV=$(auto_detect_dev)
+
+  UB_PUBLIC=$(ask "Ubuntu PUBLIC IPv4" "$LOCAL_IP")
+  MT_PUBLIC=$(ask "MikroTik PUBLIC IPv4" "")
+  UB_TUN_IP=$(ask "Ubuntu tunnel IP (e.g., 192.168.100.2/30)" "192.168.100.2/30")
+  MT_TUN_IP=$(ask "MikroTik tunnel IP (e.g., 192.168.100.1)" "192.168.100.1")
+
+  ip tunnel add ipip0 mode ipip remote "$MT_PUBLIC" local "$UB_PUBLIC" dev "$DEV"
+  ip addr add "$UB_TUN_IP" dev ipip0
+  ip link set ipip0 up
+
+  echo "[+] IPIP tunnel created on Ubuntu."
+  echo "======================================================"
+  echo " MikroTik RouterOS commands"
+  echo "======================================================"
+  echo "/interface ipip"
+  echo "add name=ipip-tunnel remote-address=$UB_PUBLIC local-address=$MT_PUBLIC mtu=1480"
+  echo ""
+  echo "/ip address"
+  echo "add address=$MT_TUN_IP/30 interface=ipip-tunnel"
+  echo ""
+  echo "/ip firewall nat"
+  echo "add chain=srcnat out-interface=ipip-tunnel action=masquerade comment=\\"NAT for IPIP\\""
+  echo ""
+  while true; do
+    PORT=$(ask "Enter port to forward via DST-NAT (blank to finish)" "")
+    [ -z "$PORT" ] && break
+    echo "add chain=dstnat in-interface=ipip-tunnel protocol=tcp dst-port=$PORT action=dst-nat to-addresses=<LAN_IP_IR> to-ports=$PORT comment=\\"Forward TCP/$PORT\\""
+    echo "add chain=dstnat in-interface=ipip-tunnel protocol=udp dst-port=$PORT action=dst-nat to-addresses=<LAN_IP_IR> to-ports=$PORT comment=\\"Forward UDP/$PORT\\""
+  done
+  echo "======================================================"
+  echo "⚠️ Replace <LAN_IP_IR> with the internal IP of your MikroTik LAN server."
+  read -rp "Press Enter..." _
+}
+
+update_script() {
+  banner
+  echo "[*] Updating VXLAN Manager..."
+  URL="https://raw.githubusercontent.com/pooyaserver/vxlan/master/main.sh"
+  curl -sSL "$URL" -o /usr/local/bin/vxlan-manager.sh
+  chmod +x /usr/local/bin/vxlan-manager.sh
+  echo "[+] Script updated to latest version."
+  read -rp "Press Enter..." _
+}
+
+
 # ------------------ Menu (ORIGINAL + one new option 9) ------------------
 
 menu() {
@@ -357,12 +408,14 @@ menu() {
     echo "2) Install Multi VXLAN IR (IPv6 / 6to4)"
     echo "3) Install VXLAN EU (IPv4)"
     echo "4) Install VXLAN EU (IPv6 / 6to4)"
-    echo "5) Status"
-    echo "6) Delete"
-    echo "7) Health Check"
-    echo "8) Install HAProxy"
-    echo "9) Advanced Tools"
-    echo "10) Enable BBR   ← NEW"
+    echo "5) Install IPIP Tunnel (Ubuntu ↔ MikroTik)"
+    echo "6) Status"
+    echo "7) Delete"
+    echo "8) Health Check"
+    echo "9) Install HAProxy"
+    echo "10) Advanced Tools"
+    echo "11) Enable BBR"
+    echo "12) Update Script"
     echo "0) Exit"
     echo "------------------------------------------"
     read -rp "Enter option: " op
@@ -371,12 +424,14 @@ menu() {
       2) install_multi_ir_v6 ; read -rp "Press Enter..." _ ;;
       3) install_eu_v4 ; read -rp "Press Enter..." _ ;;
       4) install_eu_v6 ; read -rp "Press Enter..." _ ;;
-      5) status ; read -rp "Press Enter..." _ ;;
-      6) delete_all ; read -rp "Press Enter..." _ ;;
-      7) health_check ; read -rp "Press Enter..." _ ;;
-      8) install_haproxy ; read -rp "Press Enter..." _ ;;
-      9) advanced_menu ;;
-      10) enable_bbr ;;
+      5) install_ipip ; read -rp "Press Enter..." _ ;;
+      6) status ; read -rp "Press Enter..." _ ;;
+      7) delete_all ; read -rp "Press Enter..." _ ;;
+      8) health_check ; read -rp "Press Enter..." _ ;;
+      9) install_haproxy ; read -rp "Press Enter..." _ ;;
+      10) advanced_menu ;;
+      11) enable_bbr ;;
+      12) update_script ;;
       0) exit 0 ;;
       *) echo "Invalid option"; sleep 1 ;;
     esac
