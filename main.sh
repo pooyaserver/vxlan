@@ -470,6 +470,7 @@ add_gre() {
   MT_PUBLIC=$(ask "MikroTik PUBLIC IPv4" "")
   UB_TUN_IP=$(ask "Ubuntu tunnel IP (e.g., 192.168.10.2/30)" "")
   MT_TUN_IP=$(ask "MikroTik tunnel IP (e.g., 192.168.10.1)" "")
+  MT_TUN_IP2=$(ask "Ubuntu tunnel IP (e.g., 192.168.10.2)" "")
 
   # ساخت تونل
   if ! ip tunnel add "$IF_NAME" mode gre local "$LOCAL_IP" remote "$MT_PUBLIC" dev "$DEV" ttl 255; then
@@ -482,7 +483,7 @@ add_gre() {
   ip link set "$IF_NAME" up
 
   # ذخیره در آرایه
-  GRE_TUNNELS+=("$IF_NAME:$LOCAL_IP:$MT_PUBLIC:$UB_TUN_IP:$MT_TUN_IP")
+  GRE_TUNNELS+=("$IF_NAME:$LOCAL_IP:$MT_PUBLIC:$UB_TUN_IP:$MT_TUN_IP:$MT_TUN_IP2")
   save_config
 
   # نمایش دستورات برای میکروتیک
@@ -500,8 +501,8 @@ add_gre() {
     IFS=',' read -ra PORT_LIST <<< "$PORTS"
     for PORT in "${PORT_LIST[@]}"; do
       PORT=$(echo "$PORT" | xargs)
-      echo "/ip firewall nat add chain=dstnat in-interface=$IF_NAME protocol=tcp dst-port=$PORT action=dst-nat to-addresses=$UB_TUN_IP"
-      echo "/ip firewall nat add chain=dstnat in-interface=$IF_NAME protocol=udp dst-port=$PORT action=dst-nat to-addresses=$UB_TUN_IP"
+      echo "/ip firewall nat add chain=dstnat protocol=tcp dst-port=$PORT action=dst-nat to-addresses=$MT_TUN_IP2"
+      echo "/ip firewall nat add chain=dstnat protocol=udp dst-port=$PORT action=dst-nat to-addresses=$MT_TUN_IP2"
     done
   fi
   echo "======================================================"
