@@ -82,8 +82,8 @@ create_up_script() {
 set -e
 . /etc/vxlan-manager.conf
 
-# IPv4 tunnels
-for t in "${TUNNELS[@]}"; do
+# VXLAN IPv4 tunnels
+for t in "${TUNNELS[@]-}"; do
   IFS=":" read IF_NAME VNI PORT LOCAL_IP REMOTE_IP LOCAL_TUN_IP REMOTE_TUN_IP <<< "$t"
   modprobe vxlan || true
   ip link show "$IF_NAME" >/dev/null 2>&1 && ip link del "$IF_NAME" || true
@@ -94,8 +94,8 @@ for t in "${TUNNELS[@]}"; do
   bridge fdb append 00:00:00:00:00:00 dev "$IF_NAME" dst "$REMOTE_IP"
 done
 
-# IPv6 tunnels
-for t in "${TUNNELS_V6[@]}"; do
+# VXLAN IPv6 tunnels
+for t in "${TUNNELS_V6[@]-}"; do
   IFS=":" read IF_NAME VNI PORT LOCAL_IP REMOTE_IP LOCAL_TUN_IP REMOTE_TUN_IP <<< "$t"
   modprobe vxlan || true
   ip link show "$IF_NAME" >/dev/null 2>&1 && ip link del "$IF_NAME" || true
@@ -105,6 +105,15 @@ for t in "${TUNNELS_V6[@]}"; do
   ip -6 addr add "$LOCAL_TUN_IP" dev "$IF_NAME"
   bridge fdb append 00:00:00:00:00:00 dev "$IF_NAME" dst "$REMOTE_IP"
 done
+
+# GRE tunnels
+for g in "${GRE_TUNNELS[@]-}"; do
+  IFS=":" read IF_NAME LOCAL_IP MT_PUBLIC UB_TUN_IP MT_TUN_IP <<< "$g"
+  ip tunnel del "$IF_NAME" 2>/dev/null || true
+  ip tunnel add "$IF_NAME" mode gre local "$LOCAL_IP" remote "$MT_PUBLIC" ttl 255
+  ip addr add "$UB_TUN_IP" dev "$IF_NAME"
+  ip link set "$IF_NAME" up
+done
 EOS
   chmod +x "$UP_SCRIPT"
 }
@@ -113,13 +122,23 @@ create_down_script() {
   cat > "$DOWN_SCRIPT" <<'EOS'
 #!/usr/bin/env bash
 . /etc/vxlan-manager.conf
-for t in "${TUNNELS[@]}"; do
+
+# Delete VXLAN IPv4
+for t in "${TUNNELS[@]-}"; do
   IF_NAME=$(echo "$t" | cut -d: -f1)
   ip link del "$IF_NAME" 2>/dev/null || true
 done
-for t in "${TUNNELS_V6[@]}"; do
+
+# Delete VXLAN IPv6
+for t in "${TUNNELS_V6[@]-}"; do
   IF_NAME=$(echo "$t" | cut -d: -f1)
   ip link del "$IF_NAME" 2>/dev/null || true
+done
+
+# Delete GRE
+for g in "${GRE_TUNNELS[@]-}"; do
+  IF_NAME=$(echo "$g" | cut -d: -f1)
+  ip tunnel del "$IF_NAME" 2>/dev/null || true
 done
 EOS
   chmod +x "$DOWN_SCRIPT"
