@@ -459,9 +459,16 @@ add_gre() {
   UB_TUN_IP=$(ask "Ubuntu tunnel IP (e.g., 192.168.10.2/30)" "")
   MT_TUN_IP=$(ask "MikroTik tunnel IP (e.g., 192.168.10.1)" "")
 
-  # ساختن تونل
-  ip tunnel add "$IF_NAME" mode gre local "$LOCAL_IP" remote "$MT_PUBLIC" dev "$DEV" ttl 255 2>/dev/null || true
-  ip addr add "$UB_TUN_IP" dev "$IF_NAME" 2>/dev/null || true
+  # Check if interface already exists
+  if ip link show "$IF_NAME" >/dev/null 2>&1; then
+    echo "[!] GRE interface $IF_NAME already exists. Choose another name."
+    read -rp "Press Enter..." _
+    return
+  fi
+
+  # Create GRE tunnel
+  ip tunnel add "$IF_NAME" mode gre local "$LOCAL_IP" remote "$MT_PUBLIC" dev "$DEV" ttl 255
+  ip addr add "$UB_TUN_IP" dev "$IF_NAME"
   ip link set "$IF_NAME" up
 
   GRE_TUNNELS+=("$IF_NAME:$LOCAL_IP:$MT_PUBLIC:$UB_TUN_IP:$MT_TUN_IP")
@@ -492,10 +499,33 @@ del_gre() {
   banner
   echo "[*] Delete GRE Tunnel"
   read -rp "Enter GRE interface name to delete: " IF_NAME
+
+  # اگر وجود نداشت، خطا نده
+  if ! ip link show "$IF_NAME" >/dev/null 2>&1; then
+    echo "[!] GRE interface $IF_NAME not found."
+    read -rp "Press Enter..." _
+    return
+  fi
+
+  # حذف تونل از کرنل
   ip tunnel del "$IF_NAME" 2>/dev/null || true
-  echo "[+] GRE tunnel $IF_NAME deleted."
+
+  # حذف رکورد از GRE_TUNNELS در کانفیگ
+  safe_load
+  NEW_GRE_TUNNELS=()
+  for g in "${GRE_TUNNELS[@]-}"; do
+    NAME=$(echo "$g" | cut -d: -f1)
+    if [ "$NAME" != "$IF_NAME" ]; then
+      NEW_GRE_TUNNELS+=("$g")
+    fi
+  done
+  GRE_TUNNELS=("${NEW_GRE_TUNNELS[@]}")
+  save_config
+
+  echo "[+] GRE tunnel $IF_NAME deleted successfully."
   read -rp "Press Enter..." _
 }
+
 
 list_gre() {
   banner
