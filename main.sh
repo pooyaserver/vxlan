@@ -67,6 +67,7 @@ save_config() {
   cat > "$CONF_FILE" <<EOF
 TUNNELS=(${TUNNELS[@]-})
 TUNNELS_V6=(${TUNNELS_V6[@]-})
+GRE_TUNNELS=(${GRE_TUNNELS[@]-})
 EOF
   chmod 600 "$CONF_FILE"
 }
@@ -287,37 +288,86 @@ install_eu_v6() {
 status() {
   load_config
   echo "---------------- STATUS ----------------"
+
+  # VXLAN IPv4 tunnels
   for t in "${TUNNELS[@]-}"; do
     IFS=":" read IF_NAME VNI PORT LOCAL_IP REMOTE_IP LOCAL_TUN_IP REMOTE_TUN_IP <<< "$t"
-    echo "Interface : $IF_NAME (IPv4) -> $REMOTE_IP"
+    echo "Interface : $IF_NAME (VXLAN IPv4) -> $REMOTE_IP"
     ip link show "$IF_NAME" >/dev/null 2>&1 && echo "Status    : UP" || echo "Status    : DOWN"
     echo "Local Tun : $LOCAL_TUN_IP"
     echo "Remote Tun: $REMOTE_TUN_IP"
     echo "--------------------------------------"
   done
+
+  # VXLAN IPv6 tunnels
   for t in "${TUNNELS_V6[@]-}"; do
     IFS=":" read IF_NAME VNI PORT LOCAL_IP REMOTE_IP LOCAL_TUN_IP REMOTE_TUN_IP <<< "$t"
-    echo "Interface : $IF_NAME (IPv6) -> $REMOTE_IP"
+    echo "Interface : $IF_NAME (VXLAN IPv6) -> $REMOTE_IP"
     ip link show "$IF_NAME" >/dev/null 2>&1 && echo "Status    : UP" || echo "Status    : DOWN"
     echo "Local Tun : $LOCAL_TUN_IP"
     echo "Remote Tun: $REMOTE_TUN_IP"
+    echo "--------------------------------------"
+  done
+
+  # GRE tunnels
+  for g in "${GRE_TUNNELS[@]-}"; do
+    IFS=":" read IF_NAME LOCAL_IP MT_PUBLIC UB_TUN_IP MT_TUN_IP <<< "$g"
+    echo "Interface : $IF_NAME (GRE) -> $MT_PUBLIC"
+    ip link show "$IF_NAME" >/dev/null 2>&1 && echo "Status    : UP" || echo "Status    : DOWN"
+    echo "Local Tun : $UB_TUN_IP"
+    echo "Remote Tun: $MT_TUN_IP"
     echo "--------------------------------------"
   done
 }
 
 delete_all() {
+  echo "[i] Stopping services and removing files..."
   systemctl disable --now vxlan-manager.service >/dev/null 2>&1 || true
   systemctl disable --now vxlan-health.timer >/dev/null 2>&1 || true
-  rm -f "$CONF_FILE" "$UP_SCRIPT" "$DOWN_SCRIPT" "$HC_SCRIPT" "$SVC_FILE" "$SVC_HEALTH" "$TIMER_FILE"
+
+  # Delete VXLAN IPv4 interfaces
+  for t in "${TUNNELS[@]-}"; do
+    IF_NAME=$(echo "$t" | cut -d: -f1)
+    ip link del "$IF_NAME" 2>/dev/null || true
+  done
+
+  # Delete VXLAN IPv6 interfaces
+  for t in "${TUNNELS_V6[@]-}"; do
+    IF_NAME=$(echo "$t" | cut -d: -f1)
+    ip link del "$IF_NAME" 2>/dev/null || true
+  done
+
+  # Delete GRE interfaces
+  for g in "${GRE_TUNNELS[@]-}"; do
+    IF_NAME=$(echo "$g" | cut -d: -f1)
+    ip tunnel del "$IF_NAME" 2>/dev/null || true
+  done
+
+  rm -f "$CONF_FILE" "$UP_SCRIPT" "$DOWN_SCRIPT" "$HC_SCRIPT" \
+        "$SVC_FILE" "$SVC_HEALTH" "$TIMER_FILE"
   systemctl daemon-reload
-  echo "[+] VXLAN completely removed."
+  echo "[+] VXLAN/GRE completely removed."
 }
 
 health_check() {
   load_config
   echo "----- Health Check -----"
+
+  # VXLAN IPv4 & IPv6
   for t in "${TUNNELS[@]-}" "${TUNNELS_V6[@]-}"; do
+    [ -z "$t" ] && continue
     REMOTE_TUN_IP=$(echo "$t" | cut -d: -f7)
+    if ping -c1 -W2 "$REMOTE_TUN_IP" >/dev/null 2>&1; then
+      echo "[OK] $REMOTE_TUN_IP reachable"
+    else
+      echo "[FAIL] $REMOTE_TUN_IP unreachable"
+    fi
+  done
+
+  # GRE tunnels
+  for g in "${GRE_TUNNELS[@]-}"; do
+    [ -z "$g" ] && continue
+    REMOTE_TUN_IP=$(echo "$g" | cut -d: -f5)
     if ping -c1 -W2 "$REMOTE_TUN_IP" >/dev/null 2>&1; then
       echo "[OK] $REMOTE_TUN_IP reachable"
     else
@@ -347,43 +397,48 @@ enable_bbr() {
   read -rp "Press Enter..." _
 }
 
-install_ipip() {
+install_multi_gre() {
   banner
-  echo "[*] Configure IPIP Tunnel (Ubuntu ↔ MikroTik)"
+  echo "[*] Configure Multi GRE Tunnels (Ubuntu ↔ MikroTik)"
 
   LOCAL_IP=$(auto_detect_ip)
   DEV=$(auto_detect_dev)
 
-  UB_PUBLIC=$(ask "Ubuntu PUBLIC IPv4" "$LOCAL_IP")
-  MT_PUBLIC=$(ask "MikroTik PUBLIC IPv4" "")
-  UB_TUN_IP=$(ask "Ubuntu tunnel IP (e.g., 192.168.100.2/30)" "192.168.100.2/30")
-  MT_TUN_IP=$(ask "MikroTik tunnel IP (e.g., 192.168.100.1)" "192.168.100.1")
+  local count
+  count=$(ask "How many GRE peers (1-10)" "2")
+  GRE_TUNNELS=()
 
-  ip tunnel add ipip0 mode ipip remote "$MT_PUBLIC" local "$UB_PUBLIC" dev "$DEV"
-  ip addr add "$UB_TUN_IP" dev ipip0
-  ip link set ipip0 up
+  for i in $(seq 1 "$count"); do
+    echo "--- GRE Peer $i ---"
+    IF_NAME=$(ask "GRE interface name" "gre$i")
+    MT_PUBLIC=$(ask "MikroTik PUBLIC IPv4 (IR $i)" "")
+    UB_TUN_IP=$(ask "Ubuntu tunnel IP (e.g., 192.168.$i.2/30)" "")
+    MT_TUN_IP=$(ask "MikroTik tunnel IP (e.g., 192.168.$i.1)" "")
 
-  echo "[+] IPIP tunnel created on Ubuntu."
-  echo "======================================================"
-  echo " MikroTik RouterOS commands"
-  echo "======================================================"
-  echo "/interface ipip"
-  echo "add name=ipip-tunnel remote-address=$UB_PUBLIC local-address=$MT_PUBLIC mtu=1480"
-  echo ""
-  echo "/ip address"
-  echo "add address=$MT_TUN_IP/30 interface=ipip-tunnel"
-  echo ""
-  echo "/ip firewall nat"
-  echo "add chain=srcnat out-interface=ipip-tunnel action=masquerade comment=\\"NAT for IPIP\\""
-  echo ""
-  while true; do
-    PORT=$(ask "Enter port to forward via DST-NAT (blank to finish)" "")
-    [ -z "$PORT" ] && break
-    echo "add chain=dstnat in-interface=ipip-tunnel protocol=tcp dst-port=$PORT action=dst-nat to-addresses=<LAN_IP_IR> to-ports=$PORT comment=\\"Forward TCP/$PORT\\""
-    echo "add chain=dstnat in-interface=ipip-tunnel protocol=udp dst-port=$PORT action=dst-nat to-addresses=<LAN_IP_IR> to-ports=$PORT comment=\\"Forward UDP/$PORT\\""
+    # Create GRE interface
+    ip tunnel add "$IF_NAME" mode gre local "$LOCAL_IP" remote "$MT_PUBLIC" dev "$DEV" ttl 255
+    ip addr add "$UB_TUN_IP" dev "$IF_NAME"
+    ip link set "$IF_NAME" up
+
+    GRE_TUNNELS+=("$IF_NAME:$LOCAL_IP:$MT_PUBLIC:$UB_TUN_IP:$MT_TUN_IP")
+
+    echo "======================================================"
+    echo " MikroTik RouterOS commands for GRE Peer $i"
+    echo "======================================================"
+    echo "/interface gre add name=$IF_NAME remote-address=$LOCAL_IP local-address=$MT_PUBLIC mtu=1476"
+    echo "/ip address add address=$MT_TUN_IP/30 interface=$IF_NAME"
+    echo "/ip firewall nat add chain=srcnat out-interface=$IF_NAME action=masquerade comment=\"NAT for GRE $i\""
+    echo ""
+    while true; do
+      PORT=$(ask "Enter port to forward via DST-NAT (blank to finish)" "")
+      [ -z "$PORT" ] && break
+      echo "/ip firewall nat add chain=dstnat in-interface=$IF_NAME protocol=tcp dst-port=$PORT action=dst-nat to-addresses=<LAN_IP_IR> to-ports=$PORT comment=\"Forward TCP/$PORT on GRE $i\""
+      echo "/ip firewall nat add chain=dstnat in-interface=$IF_NAME protocol=udp dst-port=$PORT action=dst-nat to-addresses=<LAN_IP_IR> to-ports=$PORT comment=\"Forward UDP/$PORT on GRE $i\""
+    done
+    echo "======================================================"
   done
-  echo "======================================================"
-  echo "⚠️ Replace <LAN_IP_IR> with the internal IP of your MikroTik LAN server."
+
+  echo "⚠️ Replace <LAN_IP_IR> with your internal MikroTik LAN IP."
   read -rp "Press Enter..." _
 }
 
@@ -408,7 +463,7 @@ menu() {
     echo "2) Install Multi VXLAN IR (IPv6 / 6to4)"
     echo "3) Install VXLAN EU (IPv4)"
     echo "4) Install VXLAN EU (IPv6 / 6to4)"
-    echo "5) Install IPIP Tunnel (Ubuntu ↔ MikroTik)"
+    echo "5) Install Multi GRE Tunnels (Ubuntu ↔ MikroTik)"
     echo "6) Status"
     echo "7) Delete"
     echo "8) Health Check"
@@ -424,7 +479,7 @@ menu() {
       2) install_multi_ir_v6 ; read -rp "Press Enter..." _ ;;
       3) install_eu_v4 ; read -rp "Press Enter..." _ ;;
       4) install_eu_v6 ; read -rp "Press Enter..." _ ;;
-      5) install_ipip ; read -rp "Press Enter..." _ ;;
+      5) install_multi_gre ; read -rp "Press Enter..." _ ;;
       6) status ; read -rp "Press Enter..." _ ;;
       7) delete_all ; read -rp "Press Enter..." _ ;;
       8) health_check ; read -rp "Press Enter..." _ ;;
