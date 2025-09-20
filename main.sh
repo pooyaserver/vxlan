@@ -425,7 +425,7 @@ install_multi_gre() {
   DEV=$(auto_detect_dev)
 
   local count
-  count=$(ask "How many GRE peers (1-10)" "2")
+  count=$(ask "How many GRE peers (1-10)" "1")
   GRE_TUNNELS=()
 
   for i in $(seq 1 "$count"); do
@@ -435,12 +435,14 @@ install_multi_gre() {
     UB_TUN_IP=$(ask "Ubuntu tunnel IP (e.g., 192.168.$i.2/30)" "")
     MT_TUN_IP=$(ask "MikroTik tunnel IP (e.g., 192.168.$i.1)" "")
 
-    # Create GRE interface
-    ip tunnel add "$IF_NAME" mode gre local "$LOCAL_IP" remote "$MT_PUBLIC" dev "$DEV" ttl 255
-    ip addr add "$UB_TUN_IP" dev "$IF_NAME"
+    # Create GRE tunnel on Ubuntu (بدون پاک کردن قبلی)
+    ip tunnel add "$IF_NAME" mode gre local "$LOCAL_IP" remote "$MT_PUBLIC" dev "$DEV" ttl 255 2>/dev/null || true
+    ip addr add "$UB_TUN_IP" dev "$IF_NAME" 2>/dev/null || true
     ip link set "$IF_NAME" up
 
     GRE_TUNNELS+=("$IF_NAME:$LOCAL_IP:$MT_PUBLIC:$UB_TUN_IP:$MT_TUN_IP")
+
+    echo "[+] GRE tunnel $IF_NAME created on Ubuntu."
 
     echo "======================================================"
     echo " MikroTik RouterOS commands for GRE Peer $i"
@@ -448,19 +450,31 @@ install_multi_gre() {
     echo "/interface gre add name=$IF_NAME remote-address=$LOCAL_IP local-address=$MT_PUBLIC mtu=1476"
     echo "/ip address add address=$MT_TUN_IP/30 interface=$IF_NAME"
     echo "/ip firewall nat add chain=srcnat out-interface=$IF_NAME action=masquerade comment=\"NAT for GRE $i\""
-    echo ""
-    while true; do
-      PORT=$(ask "Enter port to forward via DST-NAT (blank to finish)" "")
-      [ -z "$PORT" ] && break
-      echo "/ip firewall nat add chain=dstnat in-interface=$IF_NAME protocol=tcp dst-port=$PORT action=dst-nat to-addresses=<LAN_IP_IR> to-ports=$PORT comment=\"Forward TCP/$PORT on GRE $i\""
-      echo "/ip firewall nat add chain=dstnat in-interface=$IF_NAME protocol=udp dst-port=$PORT action=dst-nat to-addresses=<LAN_IP_IR> to-ports=$PORT comment=\"Forward UDP/$PORT on GRE $i\""
-    done
+
+    # گرفتن لیست پورت‌ها یکجا
+    PORTS=$(ask "Enter ports for DST-NAT (comma separated, e.g. 1555,5658)" "")
+    if [ -n "$PORTS" ]; then
+      IFS=',' read -ra PORT_LIST <<< "$PORTS"
+      for PORT in "${PORT_LIST[@]}"; do
+        PORT=$(echo "$PORT" | xargs) # trim spaces
+        echo "/ip firewall nat add chain=dstnat in-interface=$IF_NAME protocol=tcp dst-port=$PORT action=dst-nat to-addresses=<LAN_IP_IR> to-ports=$PORT comment=\"Forward TCP/$PORT on GRE $i\""
+        echo "/ip firewall nat add chain=dstnat in-interface=$IF_NAME protocol=udp dst-port=$PORT action=dst-nat to-addresses=<LAN_IP_IR> to-ports=$PORT comment=\"Forward UDP/$PORT on GRE $i\""
+      done
+    fi
     echo "======================================================"
+
+    # Quick connectivity test
+    echo "[*] Testing tunnel connectivity..."
+    ping -c 2 -W 3 "$MT_TUN_IP" >/dev/null 2>&1 \
+      && echo "[OK] GRE $IF_NAME tunnel is reachable ($MT_TUN_IP)" \
+      || echo "[WARN] GRE $IF_NAME tunnel is not responding yet."
   done
 
-  echo "⚠️ Replace <LAN_IP_IR> with your internal MikroTik LAN IP."
+  save_config
+  systemctl restart vxlan-manager.service
   read -rp "Press Enter..." _
 }
+
 
 update_script() {
   banner
