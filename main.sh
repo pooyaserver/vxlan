@@ -399,6 +399,13 @@ install_haproxy() {
   echo "[+] HAProxy installed."
 }
 
+install_gost() {
+  banner
+  echo "[*] Installing HAProxy..."
+  bash <(curl -Ls https://raw.githubusercontent.com/masoudgb/Gost-ip6/main/install.sh)
+  echo "[+] HAProxy installed."
+}
+
 enable_bbr() {
   banner
   echo "[*] Enabling BBR congestion control..."
@@ -570,9 +577,10 @@ menu() {
     echo "7) Delete"
     echo "8) Health Check"
     echo "9) Install HAProxy"
-    echo "10) Advanced Tools"
-    echo "11) Enable BBR"
-    echo "12) Update Script"
+    echo "10) Install GostTunnel"
+    echo "11) Advanced Tools"
+    echo "12) Enable BBR"
+    echo "13) Update Script"
     echo "0) Exit"
     echo "------------------------------------------"
     read -rp "Enter option: " op
@@ -586,9 +594,10 @@ menu() {
       7) delete_all ; read -rp "Press Enter..." _ ;;
       8) health_check ; read -rp "Press Enter..." _ ;;
       9) install_haproxy ; read -rp "Press Enter..." _ ;;
-      10) advanced_menu ;;
-      11) enable_bbr ;;
-      12) update_script ;;
+      10) install_gost ; read -pr "Press Enter..." _ ;;
+      11) advanced_menu ;;
+      12) enable_bbr ;;
+      13) update_script ;;
       0) exit 0 ;;
       *) echo "Invalid option"; sleep 1 ;;
     esac
