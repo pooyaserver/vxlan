@@ -358,10 +358,6 @@ delete_all() {
   done
 
   # Delete GRE interfaces
-  for g in "${GRE_TUNNELS[@]-}"; do
-    IF_NAME=$(echo "$g" | cut -d: -f1)
-    ip tunnel del "$IF_NAME" 2>/dev/null || true
-  done
 
   rm -f "$CONF_FILE" "$UP_SCRIPT" "$DOWN_SCRIPT" "$HC_SCRIPT" \
         "$SVC_FILE" "$SVC_HEALTH" "$TIMER_FILE"
@@ -454,41 +450,57 @@ add_gre() {
   LOCAL_IP=$(auto_detect_ip)
   DEV=$(auto_detect_dev)
 
+  # اسم تونل
   IF_NAME=$(ask "GRE interface name" "gre1")
-  MT_PUBLIC=$(ask "MikroTik PUBLIC IPv4" "")
-  UB_TUN_IP=$(ask "Ubuntu tunnel IP (e.g., 192.168.10.2/30)" "")
-  MT_TUN_IP=$(ask "MikroTik tunnel IP (e.g., 192.168.10.1)" "")
 
-  # Check if interface already exists
+  if [ -z "$IF_NAME" ]; then
+    echo "[!] GRE interface name cannot be empty."
+    read -rp "Press Enter..." _
+    return
+  fi
+
+  # چک کن وجود نداشته باشه
   if ip link show "$IF_NAME" >/dev/null 2>&1; then
     echo "[!] GRE interface $IF_NAME already exists. Choose another name."
     read -rp "Press Enter..." _
     return
   fi
 
-  # Create GRE tunnel
-  ip tunnel add "$IF_NAME" mode gre local "$LOCAL_IP" remote "$MT_PUBLIC" dev "$DEV" ttl 255
+  # ورودی‌های کاربر
+  MT_PUBLIC=$(ask "MikroTik PUBLIC IPv4" "")
+  UB_TUN_IP=$(ask "Ubuntu tunnel IP (e.g., 192.168.10.2/30)" "")
+  MT_TUN_IP=$(ask "MikroTik tunnel IP (e.g., 192.168.10.1)" "")
+
+  # ساخت تونل
+  if ! ip tunnel add "$IF_NAME" mode gre local "$LOCAL_IP" remote "$MT_PUBLIC" dev "$DEV" ttl 255; then
+    echo "[!] Failed to create GRE tunnel $IF_NAME"
+    read -rp "Press Enter..." _
+    return
+  fi
+
   ip addr add "$UB_TUN_IP" dev "$IF_NAME"
   ip link set "$IF_NAME" up
 
+  # ذخیره در آرایه
   GRE_TUNNELS+=("$IF_NAME:$LOCAL_IP:$MT_PUBLIC:$UB_TUN_IP:$MT_TUN_IP")
   save_config
 
-  echo "[+] GRE tunnel $IF_NAME created."
+  # نمایش دستورات برای میکروتیک
+  echo "[+] GRE tunnel $IF_NAME created successfully."
   echo "======================================================"
-  echo " MikroTik RouterOS commands"
+  echo " MikroTik RouterOS commands for $IF_NAME"
   echo "======================================================"
   echo "/interface gre add name=$IF_NAME remote-address=$LOCAL_IP local-address=$MT_PUBLIC mtu=1476"
   echo "/ip address add address=$MT_TUN_IP/30 interface=$IF_NAME"
-  echo "/ip firewall nat add chain=srcnat out-interface=$IF_NAME action=masquerade comment=\"NAT for GRE\""
+  echo "/ip firewall nat add chain=srcnat out-interface=$IF_NAME action=masquerade comment=\"NAT for $IF_NAME\""
 
   PORTS=$(ask "Enter ports for DST-NAT (comma separated, e.g. 80,443,1194)" "")
   if [ -n "$PORTS" ]; then
     IFS=',' read -ra PORT_LIST <<< "$PORTS"
     for PORT in "${PORT_LIST[@]}"; do
       PORT=$(echo "$PORT" | xargs)
-      echo "/ip firewall nat add chain=dstnat in-interface=$IF_NAME protocol=tcp dst-port=$PORT action=dst-nat to-addresses=<LAN_IP_IR> to-ports=$PORT comment=\"Forward TCP/$PORT on GRE\""
-      echo "/ip firewall nat add chain=dstnat in-interface=$IF_NAME protocol=udp dst-port=$PORT action=dst-nat to-addresses=<LAN_IP_IR> to-ports=$PORT comment=\"Forward UDP/$PORT on GRE\""
+      echo "/ip firewall nat add chain=dstnat in-interface=$IF_NAME protocol=tcp dst-port=$PORT action=dst-nat to-addresses=<LAN_IP_IR> to-ports=$PORT comment=\"Forward TCP/$PORT on $IF_NAME\""
+      echo "/ip firewall nat add chain=dstnat in-interface=$IF_NAME protocol=udp dst-port=$PORT action=dst-nat to-addresses=<LAN_IP_IR> to-ports=$PORT comment=\"Forward UDP/$PORT on $IF_NAME\""
     done
   fi
   echo "======================================================"
