@@ -34,7 +34,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/pooyaserver/vxlan/master/main.
 
 ## 🪚 Preview
 <p align="left">
-  <img width="100%" src="image1.jpg" alt="VXLAN Project">
+  <img width="100%" src="image.jpg" alt="VXLAN Project">
 </p>
 
 ## 🙏 Support with Crypto 
