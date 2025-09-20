@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ================================================================
-# VXLAN Tunnel Manager v1.0 (Multi IR <-> EU, IPv4 + IPv6)
+# VXLAN Tunnel Manager v1.3Pro (Multi IR <-> EU, IPv4 + IPv6)
 # Author: PooyaServerSup
 #
 # Features:
@@ -52,7 +52,7 @@ banner() {
   SERVER_COUNTRY=$(curl -sS "http://ip-api.com/json/$SERVER_IP" | jq -r '.country')
   SERVER_ISP=$(curl -sS "http://ip-api.com/json/$SERVER_IP" | jq -r '.isp')
   echo "======================================================"
-  echo "             VXLAN Tunnel Manager v1.0"
+  echo "             VXLAN Tunnel Manager v1.3Pro"
   echo "             PooyaServerSup"
   echo "======================================================"
   echo -e "|${GREEN}Server Country |${NC} $SERVER_COUNTRY"
