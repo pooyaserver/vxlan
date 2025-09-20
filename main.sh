@@ -493,14 +493,15 @@ add_gre() {
   echo "/interface gre add name=$IF_NAME remote-address=$LOCAL_IP local-address=$MT_PUBLIC mtu=1476"
   echo "/ip address add address=$MT_TUN_IP/30 interface=$IF_NAME"
   echo "/ip firewall nat add chain=srcnat out-interface=$IF_NAME action=masquerade comment=\"NAT for $IF_NAME\""
+  echo "/ip firewall nat add chain=srcnat action=masquerade"
 
   PORTS=$(ask "Enter ports for DST-NAT (comma separated, e.g. 80,443,1194)" "")
   if [ -n "$PORTS" ]; then
     IFS=',' read -ra PORT_LIST <<< "$PORTS"
     for PORT in "${PORT_LIST[@]}"; do
       PORT=$(echo "$PORT" | xargs)
-      echo "/ip firewall nat add chain=dstnat in-interface=$IF_NAME protocol=tcp dst-port=$PORT action=dst-nat to-addresses=<LAN_IP_IR> to-ports=$PORT comment=\"Forward TCP/$PORT on $IF_NAME\""
-      echo "/ip firewall nat add chain=dstnat in-interface=$IF_NAME protocol=udp dst-port=$PORT action=dst-nat to-addresses=<LAN_IP_IR> to-ports=$PORT comment=\"Forward UDP/$PORT on $IF_NAME\""
+      echo "/ip firewall nat add chain=dstnat in-interface=$IF_NAME protocol=tcp dst-port=$PORT action=dst-nat to-addresses=$UB_TUN_IP"
+      echo "/ip firewall nat add chain=dstnat in-interface=$IF_NAME protocol=udp dst-port=$PORT action=dst-nat to-addresses=$UB_TUN_IP"
     done
   fi
   echo "======================================================"
