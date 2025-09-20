@@ -594,7 +594,7 @@ menu() {
       7) delete_all ; read -rp "Press Enter..." _ ;;
       8) health_check ; read -rp "Press Enter..." _ ;;
       9) install_haproxy ; read -rp "Press Enter..." _ ;;
-      10) install_gost ; read -pr "Press Enter..." _ ;;
+      10) install_gost ; read -rp "Press Enter..." _ ;;
       11) advanced_menu ;;
       12) enable_bbr ;;
       13) update_script ;;
