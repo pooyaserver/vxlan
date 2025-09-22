@@ -73,7 +73,7 @@ EOF
   chmod 600 "$CONF_FILE"
 }
 
-load_config() { source "$CONF_FILE"; }
+load_config() { [ -f "$CONF_FILE" ] && source "$CONF_FILE" || true; }
 
 # ------------------ UP / DOWN scripts ------------------
 
@@ -86,33 +86,41 @@ set -e
 # VXLAN IPv4 tunnels
 for t in "${TUNNELS[@]-}"; do
   IFS=":" read IF_NAME VNI PORT LOCAL_IP REMOTE_IP LOCAL_TUN_IP REMOTE_TUN_IP <<< "$t"
-  modprobe vxlan || true
-  ip link show "$IF_NAME" >/dev/null 2>&1 && ip link del "$IF_NAME" || true
-  ip link add "$IF_NAME" type vxlan id "$VNI" dev "$(ip route get $REMOTE_IP | awk '{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}')" \
-    local "$LOCAL_IP" remote "$REMOTE_IP" dstport "$PORT" nolearning
+  [ -z "$REMOTE_IP" ] && continue
+  if ! ip link show "$IF_NAME" >/dev/null 2>&1; then
+    modprobe vxlan || true
+    ip link add "$IF_NAME" type vxlan id "$VNI" \
+      dev "$(ip route get $REMOTE_IP | awk '{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}')" \
+      local "$LOCAL_IP" remote "$REMOTE_IP" dstport "$PORT" nolearning
+    ip addr add "$LOCAL_TUN_IP" dev "$IF_NAME"
+    bridge fdb append 00:00:00:00:00:00 dev "$IF_NAME" dst "$REMOTE_IP"
+  fi
   ip link set "$IF_NAME" up
-  ip addr add "$LOCAL_TUN_IP" dev "$IF_NAME"
-  bridge fdb append 00:00:00:00:00:00 dev "$IF_NAME" dst "$REMOTE_IP"
 done
 
 # VXLAN IPv6 tunnels
 for t in "${TUNNELS_V6[@]-}"; do
   IFS=":" read IF_NAME VNI PORT LOCAL_IP REMOTE_IP LOCAL_TUN_IP REMOTE_TUN_IP <<< "$t"
-  modprobe vxlan || true
-  ip link show "$IF_NAME" >/dev/null 2>&1 && ip link del "$IF_NAME" || true
-  ip link add "$IF_NAME" type vxlan id "$VNI" dev "$(ip route get $REMOTE_IP | awk '{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}')" \
-    local "$LOCAL_IP" remote "$REMOTE_IP" dstport "$PORT" nolearning
+  [ -z "$REMOTE_IP" ] && continue
+  if ! ip link show "$IF_NAME" >/dev/null 2>&1; then
+    modprobe vxlan || true
+    ip link add "$IF_NAME" type vxlan id "$VNI" \
+      dev "$(ip route get $REMOTE_IP | awk '{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}')" \
+      local "$LOCAL_IP" remote "$REMOTE_IP" dstport "$PORT" nolearning
+    ip -6 addr add "$LOCAL_TUN_IP" dev "$IF_NAME"
+    bridge fdb append 00:00:00:00:00:00 dev "$IF_NAME" dst "$REMOTE_IP"
+  fi
   ip link set "$IF_NAME" up
-  ip -6 addr add "$LOCAL_TUN_IP" dev "$IF_NAME"
-  bridge fdb append 00:00:00:00:00:00 dev "$IF_NAME" dst "$REMOTE_IP"
 done
 
 # GRE tunnels
 for g in "${GRE_TUNNELS[@]-}"; do
   IFS=":" read IF_NAME LOCAL_IP MT_PUBLIC UB_TUN_IP MT_TUN_IP <<< "$g"
-  ip tunnel del "$IF_NAME" 2>/dev/null || true
-  ip tunnel add "$IF_NAME" mode gre local "$LOCAL_IP" remote "$MT_PUBLIC" ttl 255
-  ip addr add "$UB_TUN_IP" dev "$IF_NAME"
+  [ -z "$MT_PUBLIC" ] && continue
+  if ! ip link show "$IF_NAME" >/dev/null 2>&1; then
+    ip tunnel add "$IF_NAME" mode gre local "$LOCAL_IP" remote "$MT_PUBLIC" ttl 255
+    ip addr add "$UB_TUN_IP" dev "$IF_NAME"
+  fi
   ip link set "$IF_NAME" up
 done
 EOS
@@ -127,19 +135,19 @@ create_down_script() {
 # Delete VXLAN IPv4
 for t in "${TUNNELS[@]-}"; do
   IF_NAME=$(echo "$t" | cut -d: -f1)
-  ip link del "$IF_NAME" 2>/dev/null || true
+  [ -n "$IF_NAME" ] && ip link del "$IF_NAME" 2>/dev/null || true
 done
 
 # Delete VXLAN IPv6
 for t in "${TUNNELS_V6[@]-}"; do
   IF_NAME=$(echo "$t" | cut -d: -f1)
-  ip link del "$IF_NAME" 2>/dev/null || true
+  [ -n "$IF_NAME" ] && ip link del "$IF_NAME" 2>/dev/null || true
 done
 
 # Delete GRE
 for g in "${GRE_TUNNELS[@]-}"; do
   IF_NAME=$(echo "$g" | cut -d: -f1)
-  ip tunnel del "$IF_NAME" 2>/dev/null || true
+  [ -n "$IF_NAME" ] && ip tunnel del "$IF_NAME" 2>/dev/null || true
 done
 EOS
   chmod +x "$DOWN_SCRIPT"
@@ -148,7 +156,7 @@ EOS
 create_service() {
   cat > "$SVC_FILE" <<EOF
 [Unit]
-Description=VXLAN Manager v3.0
+Description=VXLAN + GRE Manager
 After=network-online.target
 Wants=network-online.target
 
